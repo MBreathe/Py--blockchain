@@ -2,6 +2,8 @@ import decimal
 import hashlib
 import json
 from time import time
+from uuid import uuid4
+from flask import Flask, jsonify, request
 
 
 class Blockchain(object):
@@ -9,14 +11,16 @@ class Blockchain(object):
         self.chain = []
         self.current_transactions = []
 
+        self.new_block(proof=1, previous_hash='1')
+
     def proof_of_work(self, last_proof:int)->int:
         proof = 0
-        while self.valid_proof(last_proof, proof) is False:
+        while not self.valid_proof(last_proof, proof):
             proof += 1
 
         return proof
 
-    def new_block(self, proof: int, previous_hash:str=None)->dict:
+    def new_block(self, proof:int, previous_hash:str=None)->dict:
         block = {
             'index': len(self.chain) + 1,
             'timestamp': time(),
@@ -56,17 +60,68 @@ class Blockchain(object):
     def last_block(self)->dict:
         return self.chain[-1]
 
+"""
+block = {
+    'index': 1,
+    'timestamp': 1506057125.900785,
+    'transactions': [
+        {
+            'sender': "8527147fe1f5426f9dd545de4b27ee00",
+            'recipient': "a77f5cdfa2934df3954a5c7c7da5df1f",
+            'amount': 5,
+        }
+    ],
+    'proof': 324984774000,
+    'previous_hash': "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+}
+"""
 
-# block = {
-#     'index': 1,
-#     'timestamp': 1506057125.900785,
-#     'transactions': [
-#         {
-#             'sender': "8527147fe1f5426f9dd545de4b27ee00",
-#             'recipient': "a77f5cdfa2934df3954a5c7c7da5df1f",
-#             'amount': 5,
-#         }
-#     ],
-#     'proof': 324984774000,
-#     'previous_hash': "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
-# }
+app = Flask(__name__)
+
+node_identifier = str(uuid4()).replace('-', '')
+
+blockchain = Blockchain()
+
+@app.route('/mine', methods=['GET'])
+def mine():
+    last_block = blockchain.last_block
+    last_proof = last_block['proof']
+    proof = blockchain.proof_of_work(last_proof)
+
+    blockchain.new_transaction(sender='0', recipient=node_identifier, amount=decimal.Decimal(1))
+
+    previous_hash = blockchain.hash(last_block)
+    block = blockchain.new_block(proof, previous_hash)
+
+    response = {
+        'message': 'New Block Forged',
+        'index': block['index'],
+        'transactions': block['transactions'],
+        'proof': block['proof'],
+        'previous_hash': block['previous_hash'],
+    }
+    return jsonify(response), 200
+
+@app.route('/transactions/new', methods=['POST'])
+def new_transaction():
+    values = request.get_json()
+
+    required = ['sender', 'recipient', 'amount']
+    if not all(k in values for k in required):
+        return 'Missing values', 400
+
+    index = blockchain.new_transaction(values['sender'], values['recipient'], values['amount'])
+
+    response = {'message': f'Transaction will be added to Block {index}'}
+    return jsonify(response), 201
+
+@app.route('/chain', methods=['GET'])
+def full_chain():
+    response = {
+        'chain': blockchain.chain,
+        'length': len(blockchain.chain)
+    }
+    return jsonify(response), 200
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
