@@ -35,7 +35,7 @@ def new_transaction():
 
     required = ['sender', 'recipient', 'amount']
     if not all(k in values for k in required):
-        return 'Missing values', 400
+        return 'Missing values. Should include: sender, recipient, amount', 400
 
     index = blockchain.new_transaction(values['sender'], values['recipient'], values['amount'])
 
